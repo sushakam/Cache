@@ -12,18 +12,40 @@ module Cache_tb;
 	logic hit;
 	logic search_cache;
 	logic search_done;
-	logic [63:0] data;
+	logic [63:0] cache_data_out;
 	logic [27:0] tag_out;
 
-	Cache Cache(.clock(clock), .reset(reset), .search_cache(search_cache),
-				.address(address), .hit(hit), .search_done(search_done), 
-				.data(data), .tag_out(tag_out));
+	
+	/* Fake main memory */
+	logic [63:0] RAM [512*(2^20)];
+	logic [63:0] RAM_address;
+	logic [63:0] main_memory_data;
 
+
+	Cache Cache(.clock(clock), .reset(reset), .search_cache(search_cache),
+				.address(address), .main_memory_data(main_memory_data), .hit(hit), 
+				.search_done(search_done), .data(cache_data_out), .tag_out(tag_out), 
+				.RAM_address(RAM_address)
+				);
 
     initial begin
         $dumpfile("vcdDumpFiles/cache.vcd");
         $dumpvars;
     end
+
+	/*initialize 512MB RAM*/
+	initial begin
+		for(integer i = 0; i < 512*(2^20); i=i+1) begin
+			RAM[i]=i*i;
+		end
+		
+
+	end
+
+	/*One clock cycle latency RAM*/
+	always @(posedge clock) begin
+		main_memory_data<=RAM[RAM_address];
+	end
 
 
 	initial begin
@@ -31,8 +53,6 @@ module Cache_tb;
 		$display("Triggering reset...");
 		reset<=1'b1;
 		address<=32'b0;
-
-
 		@(posedge clock);
 		reset<=1'b0;
 		@(posedge clock);
@@ -51,10 +71,14 @@ module Cache_tb;
 	end
 
 
+	
+
+
+	/*sample test cases*/
 	initial begin
 	
 			
-		$display("\n\nCache is \"warmed\" with tags from 0->512 and data that is the square of the tag.");
+		$display("\n\nCache is \"warmed\" with tags from 0->511 and data that is the square of the tag.");
 		$display("ie: cache line 0 will contain Tag=0, Data=0*0=0");
 		$display("    cache line 255 will contain Tag=255, Data=255*255=65025");
 		$display("    cache line 1023 will miss, since it is not in memory (max tag is 511)\n");
@@ -74,7 +98,7 @@ module Cache_tb;
 		search_cache<=1'b0;
 		repeat (2) @(posedge clock);	//wait for cache...
 
-		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, tag_out, data, hit);
+		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, tag_out, cache_data_out, hit);
 		
 
 
@@ -86,7 +110,7 @@ module Cache_tb;
 		search_cache<=1'b0;
 		repeat (2) @(posedge clock);	//wait for cache...
 
-		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, tag_out, data, hit);
+		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, tag_out,cache_data_out, hit);
 
 
 		/**HIT (fetch address=511)**/
@@ -97,7 +121,7 @@ module Cache_tb;
 		search_cache<=1'b0;
 		repeat (2) @(posedge clock);	//wait for cache...
 
-		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, tag_out, data, hit);
+		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, tag_out,cache_data_out, hit);
 
 		/**MISS (fetch address=1024) **/
 		search_cache<=1'b1;
@@ -107,7 +131,7 @@ module Cache_tb;
 		search_cache<=1'b0;
 		repeat (2) @(posedge clock);	//wait for cache...
 
-		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, tag_out, data, hit);
+		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, tag_out, cache_data_out, hit);
 
 	end
 

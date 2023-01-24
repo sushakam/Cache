@@ -21,10 +21,12 @@ module Cache(
 	input reset,
 	input search_cache,
 	input [31:0] address,
+	input [63:0] main_memory_data,
 	output logic hit,
 	output logic search_done,
 	output logic [63:0] data,
-	output logic [27:0] tag_out
+	output logic [27:0] tag_out,	//TODO: wrong size
+	output logic [63:0] RAM_address
 
 );
 
@@ -45,13 +47,19 @@ end
 
 logic valid[line_count:0];
 logic [26:0] tag[line_count:0];
-logic [word_size*block_size:0] cache[line_count:0];
+logic [word_size*block_size:0] cache[line_count:0][ways-1:0];
 
+logic [63:0] cache_line_word_buf [3:0];
 
-enum logic [1:0] {
+enum logic [3:0] {
 	CACHE_IDLE,
 	CACHE_CHECK_TAGS,
-	CACHE_DONE
+	CACHE_READ_DONE,
+	CACHE_MISS_READ_MEM,
+	CACHE_MISS_WRITE_BLOCK0,
+	CACHE_MISS_WRITE_BLOCK1,
+	CACHE_MISS_WRITE_BLOCK2,
+	CACHE_MISS_WRITE_BLOCK3
 } CACHE_STATE;
 
 //logic for determining if address is a hit
@@ -83,15 +91,79 @@ always_ff @(posedge clock, negedge reset) begin
 					end
 				end
 
-				CACHE_STATE<=CACHE_DONE;
+				CACHE_STATE<=CACHE_READ_DONE;
 			end
 
-			CACHE_DONE: begin
-				hit<=1'b0;
-				search_done<=1'b1;
+			CACHE_READ_DONE: begin
+
+				if(hit==1'b1) begin	//Cache hit. Go back to idle.
+					hit<=1'b0;
+					CACHE_STATE<=CACHE_IDLE;
+					search_done<=1'b1;
+				end else begin	//Cache miss. Fetch block from main memory. Use replacement policy (Random) 
+					CACHE_STATE<=CACHE_MISS_READ_MEM;
+				end
+			end
+
+
+
+
+			//Write back to memory using hash function
+			//Set = address % 
+			/*****Handle a Cache miss write back******/
+
+			CACHE_MISS_READ_MEM: begin
+				//Set the main memory address to the address the CPU is 
+				//requesting from the cache
+
+				RAM_address<=address;
+				CACHE_STATE<=CACHE_MISS_WRITE_BLOCK0;
+			end
+
+			CACHE_MISS_WRITE_BLOCK0: begin
+				
+				RAM_address<=address+32'd1;
+				
+				cache_line_word_buf[3]<=main_memory_data;
+
+				CACHE_STATE<=CACHE_MISS_WRITE_BLOCK1;
+
+			end
+
+			CACHE_MISS_WRITE_BLOCK1: begin
+				
+				RAM_address<=address+32'd1;
+
+				cache_line_word_buf[2]<=main_memory_data;
+				
+				CACHE_STATE<=CACHE_MISS_WRITE_BLOCK2;
+
+			end
+
+			CACHE_MISS_WRITE_BLOCK2: begin
+				
+				RAM_address<=address+32'd1;
+				
+				cache_line_word_buf[1]<=main_memory_data;
+
+				CACHE_STATE<=CACHE_MISS_WRITE_BLOCK3;
+
+			end
+
+			CACHE_MISS_WRITE_BLOCK3: begin
+				
+				cache[main_memory_data>>20][0]<={cache_line_word_buf[3], cache_line_word_buf[2], cache_line_word_buf[1], main_memory_data};
+				
 				CACHE_STATE<=CACHE_IDLE;
-			end
 
+			end
+			/****************************************/
+
+
+
+
+
+			
 		endcase
 	end
 end
@@ -106,12 +178,12 @@ always_ff @ (posedge clock, negedge reset) begin
 		for(integer i = 0; i<line_count; i=i+1) begin
 			valid[i]<=1'b0;
 			tag[i]<=i[26:0];
-			cache[i]<=i*i;
+			cache[i][0]<=i*i;
 		end
 
 	end else begin
 
-		data<=cache[address];
+		data<=cache[address][0];
 		tag_out<=tag[address];
 
 	end

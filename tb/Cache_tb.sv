@@ -33,13 +33,11 @@ module Cache_tb;
         $dumpvars;
     end
 
-	/*initialize 512MB RAM*/
+	/*initialize 4096B RAM*/
 	initial begin
-		for(integer i = 0; i < 512*(2^20); i=i+1) begin
+		for(integer i = 0; i < 4096; i=i+1) begin
 			RAM[i]=i*i;
 		end
-		
-
 	end
 
 	/*One clock cycle latency RAM*/
@@ -102,10 +100,10 @@ module Cache_tb;
 		
 
 
+		
 		/**HIT (fetch address=255)**/
 		search_cache<=1'b1;
 		address<=32'd255;
-		
 		repeat (1) @(posedge clock);
 		search_cache<=1'b0;
 		repeat (2) @(posedge clock);	//wait for cache...
@@ -129,9 +127,20 @@ module Cache_tb;
 		
 		repeat (1) @(posedge clock);
 		search_cache<=1'b0;
+		repeat (7) @(posedge clock);	//wait for cache...
+
+		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, tag_out, cache_data_out, hit);
+
+		/**HIT (Just missed and loaded) **/
+		search_cache<=1'b1;
+		address<=32'd1023;
+		
+		repeat (1) @(posedge clock);
+		search_cache<=1'b0;
 		repeat (2) @(posedge clock);	//wait for cache...
 
 		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, tag_out, cache_data_out, hit);
+*/
 
 	end
 

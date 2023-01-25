@@ -40,10 +40,8 @@ module Cache_tb;
 		end
 	end
 
-	/*One clock cycle latency RAM*/
-	always @(posedge clock) begin
-		main_memory_data<=RAM[RAM_address];
-	end
+	/*Assume combinational memory*/
+	assign main_memory_data=RAM[RAM_address];
 
 
 	initial begin
@@ -99,50 +97,50 @@ module Cache_tb;
 		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, tag_out, cache_data_out, hit);
 		
 
-
-		
-		/**HIT (fetch address=255)**/
+		/**MISS (Compulsory)**/
 		search_cache<=1'b1;
-		address<=32'd255;
-		repeat (1) @(posedge clock);
-		search_cache<=1'b0;
-		repeat (2) @(posedge clock);	//wait for cache...
-
-		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, tag_out,cache_data_out, hit);
-
-
-		/**HIT (fetch address=511)**/
-		search_cache<=1'b1;
-		address<=32'd511;
+		address<=32'd16;
 		
 		repeat (1) @(posedge clock);
 		search_cache<=1'b0;
-		repeat (2) @(posedge clock);	//wait for cache...
-
-		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, tag_out,cache_data_out, hit);
-
-		/**MISS (fetch address=1024) **/
-		search_cache<=1'b1;
-		address<=32'd1023;
-		
-		repeat (1) @(posedge clock);
-		search_cache<=1'b0;
-		repeat (7) @(posedge clock);	//wait for cache...
+		repeat (8) @(posedge clock);	//wait for cache...
 
 		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, tag_out, cache_data_out, hit);
 
-		/**HIT (Just missed and loaded) **/
+
+		/**HIT (Just loaded)**/
 		search_cache<=1'b1;
-		address<=32'd1023;
+		address<=32'd16;
 		
 		repeat (1) @(posedge clock);
 		search_cache<=1'b0;
 		repeat (2) @(posedge clock);	//wait for cache...
 
-		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, tag_out, cache_data_out, hit);
-*/
+		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, Cache.tag[address>>3], cache_data_out, hit);
 
+
+		/**MISS (Compulsory)**/
+		search_cache<=1'b1;
+		address<=32'd24;
+		
+		repeat (1) @(posedge clock);
+		search_cache<=1'b0;
+		repeat (8) @(posedge clock);	//wait for cache...
+
+		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, Cache.tag[address>>3], cache_data_out, hit);
+
+
+		/**HIT (Just loaded)**/
+		search_cache<=1'b1;
+		address<=32'd24;
+		
+		repeat (1) @(posedge clock);
+		search_cache<=1'b0;
+		repeat (2) @(posedge clock);	//wait for cache...
+
+		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, Cache.tag[address>>3], cache_data_out, hit);
 	end
+
 
 
 endmodule

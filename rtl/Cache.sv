@@ -47,9 +47,10 @@ end
 
 logic valid[line_count:0];
 logic [26:0] tag[line_count:0];
-logic [word_size*block_size:0] cache[line_count:0][ways-1:0];
+logic [word_size] cache[line_count:0][ways-1:0][block_size];
 
 logic [63:0] cache_line_word_buf [3:0];
+logic [63:0] RAM_address_buffer;
 
 enum logic [3:0] {
 	CACHE_IDLE,
@@ -62,12 +63,16 @@ enum logic [3:0] {
 	CACHE_MISS_WRITE_BLOCK3
 } CACHE_STATE;
 
+
+assign block_offset=address[1:0];
+
 //logic for determining if address is a hit
 always_ff @(posedge clock, negedge reset) begin
 		
 	if(reset==1'b0) begin
 		hit<=1'b0;
 		search_done<=1'b0;
+		RAM_address_buffer<=63'd0;
 		CACHE_STATE<=CACHE_IDLE;
 	end else begin
 		
@@ -86,8 +91,9 @@ always_ff @(posedge clock, negedge reset) begin
 			CACHE_CHECK_TAGS: begin	//1
 				hit<=1'b0;
 				for(integer i = 0; i < line_count; i=i+1) begin
-					if(tag[i] == address[26:0]) begin
+					if((tag[i]>>3) == (address[26:0]>>3)) begin
 						hit<=1'b1;
+						data<=cache[address>>3][0][block_offset];
 					end
 				end
 
@@ -98,8 +104,8 @@ always_ff @(posedge clock, negedge reset) begin
 
 				if(hit==1'b1) begin	//Cache hit. Go back to idle.
 					hit<=1'b0;
-					CACHE_STATE<=CACHE_IDLE;
 					search_done<=1'b1;
+					CACHE_STATE<=CACHE_IDLE;
 				end else begin	//Cache miss. Fetch block from main memory. Use replacement policy (Random) 
 					CACHE_STATE<=CACHE_MISS_READ_MEM;
 				end
@@ -117,6 +123,7 @@ always_ff @(posedge clock, negedge reset) begin
 				//requesting from the cache
 
 				RAM_address<=address;
+				RAM_address_buffer<=address;
 				CACHE_STATE<=CACHE_MISS_WRITE_BLOCK0;
 			end
 
@@ -124,7 +131,7 @@ always_ff @(posedge clock, negedge reset) begin
 				
 				RAM_address<=RAM_address+32'd1;
 				
-				cache_line_word_buf[3]<=main_memory_data;
+				cache_line_word_buf[2]<=main_memory_data;
 
 				CACHE_STATE<=CACHE_MISS_WRITE_BLOCK1;
 
@@ -134,7 +141,7 @@ always_ff @(posedge clock, negedge reset) begin
 				
 				RAM_address<=RAM_address+32'd1;
 
-				cache_line_word_buf[2]<=main_memory_data;
+				cache_line_word_buf[1]<=main_memory_data;
 				
 				CACHE_STATE<=CACHE_MISS_WRITE_BLOCK2;
 
@@ -144,7 +151,7 @@ always_ff @(posedge clock, negedge reset) begin
 				
 				RAM_address<=RAM_address+32'd1;
 				
-				cache_line_word_buf[1]<=main_memory_data;
+				cache_line_word_buf[0]<=main_memory_data;
 
 				CACHE_STATE<=CACHE_MISS_WRITE_BLOCK3;
 
@@ -152,8 +159,17 @@ always_ff @(posedge clock, negedge reset) begin
 
 			CACHE_MISS_WRITE_BLOCK3: begin	//7
 				
-				cache[main_memory_data>>20][0]<={cache_line_word_buf[3], cache_line_word_buf[2], cache_line_word_buf[1], main_memory_data};
-				tag[main_memory_data>>20]<=RAM_address[26:0];
+				//cache[RAM_address_buffer>>3][0]<={cache_line_word_buf[2], cache_line_word_buf[1], cache_line_word_buf[0], main_memory_data};
+				
+				cache[RAM_address_buffer>>3][0][0]<=cache_line_word_buf[2];
+				cache[RAM_address_buffer>>3][0][1]<=cache_line_word_buf[1];
+				cache[RAM_address_buffer>>3][0][2]<=cache_line_word_buf[0];
+				cache[RAM_address_buffer>>3][0][3]<=main_memory_data;
+
+				//tag[RAM_address_buffer>>3]<=RAM_address_buffer[26:0];
+				tag[RAM_address_buffer>>3]<=RAM_address_buffer[26:0];
+
+				search_done<=1'b1;
 				CACHE_STATE<=CACHE_IDLE;
 
 			end
@@ -179,12 +195,15 @@ always_ff @ (posedge clock, negedge reset) begin
 			//init with mem skipping by 2s
 			valid[i]<=1'b0;
 			tag[i]<=27'd0;
-			cache[i][0]<=27'd0;
+			cache[i][0][3]<=27'd0;
+			cache[i][0][2]<=27'd0;
+			cache[i][0][1]<=27'd0;
+			cache[i][0][0]<=27'd0;
 		end
 
 	end else begin
 
-		data<=cache[address][0];
+		//data<=cache[address][0];
 		tag_out<=tag[address];
 
 	end

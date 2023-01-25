@@ -25,7 +25,7 @@ module Cache(
 	output logic hit,
 	output logic search_done,
 	output logic [63:0] data,
-	output logic [27:0] tag_out,	//TODO: wrong size
+	output logic [26:0] tag_out,	//TODO: wrong size
 	output logic [63:0] RAM_address
 
 );
@@ -159,25 +159,20 @@ always_ff @(posedge clock, negedge reset) begin
 
 			CACHE_MISS_WRITE_BLOCK3: begin	//7
 				
-				//cache[RAM_address_buffer>>3][0]<={cache_line_word_buf[2], cache_line_word_buf[1], cache_line_word_buf[0], main_memory_data};
 				
 				cache[RAM_address_buffer>>3][0][0]<=cache_line_word_buf[2];
 				cache[RAM_address_buffer>>3][0][1]<=cache_line_word_buf[1];
 				cache[RAM_address_buffer>>3][0][2]<=cache_line_word_buf[0];
 				cache[RAM_address_buffer>>3][0][3]<=main_memory_data;
 
-				//tag[RAM_address_buffer>>3]<=RAM_address_buffer[26:0];
 				tag[RAM_address_buffer>>3]<=RAM_address_buffer[26:0];
 
 				search_done<=1'b1;
 				CACHE_STATE<=CACHE_IDLE;
 
 			end
+
 			/****************************************/
-
-
-
-
 
 			
 		endcase

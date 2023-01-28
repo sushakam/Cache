@@ -1,56 +1,91 @@
-// An 8-way set-associate test cache. 
-// By Hakam Atassi, for the Mac-Risc-V team.
+////////////////////////////////////////////////////////////////////////
+//================= An 8-way set-associative cache====================//
+//  __  __                    ____    _                               //
+// |  \/  |   __ _    ___    |  _ \  (_)  ___    ___          __   __ //
+// | |\/| |  / _` |  / __|   | |_) | | | / __|  / __|  _____  \ \ / / //
+// | |  | | | (_| | | (__    |  _ <  | | \__ \ | (__  |_____|  \ V /  //
+// |_|  |_|  \__,_|  \___|   |_| \_\ |_| |___/  \___|           \_/   //
+//====================================================================//                                                                 
+////////////////////////////////////////////////////////////////////////
 
 
-/*			Specifications
+/*		Specifications
+	*
+	*	Main Memory Size = 2 GB 
 	*	
 	*	Cache Size = 64 kB
 	*	Set size = 8
 	*	Block size = 16 bytes
 	*	Word size = 64 bits
 	*
-	*		Therefore: 
+	*	Therefore: 
 	*	Lines = 512 lines
 	*	Since 512 lines * 8 ways (blocks per line) * 4 words per block * 4 bytes per word = 64kB of data
 	*	
 */
 
 
+
 module Cache(
 	input clock,
 	input reset,
-	input search_cache,
-	input [31:0] address,
-	input [63:0] main_memory_data,
+	input search_cache,				//Flag to leave idle and search memory
+	input [31:0] address,		
+	input [63:0] main_memory_data,	//Input from main memory 
 	output logic hit,
-	output logic search_done,
+	output logic search_done,		//Flag indicating completion of cache search. Data is ready when high	TODO: rename to data_ready
 	output logic [63:0] data,
-	output logic [26:0] tag_out,	//TODO: wrong size
-	output logic [63:0] RAM_address
+	output logic [26:0] tag_out,	//For debugging (not needed)	TODO: delete
+	output logic [63:0] RAM_address	//For debugging (not needed)	TODO: delete
 
 );
 
-
-parameter word_size=64;	//64 bit words
-parameter block_size=4;	//4 words per block
-parameter cache_capacity = 64*2^10;	//
-parameter ways = 8;
-parameter line_count = 512; 
-
-
-
-initial begin
+initial
 	$display("\nCache running!\n");
-end
+
+
+//===========Configurable Parameters==============//
+parameter word_size=64;	//64 bit words			  //
+parameter block_size=4;	//4 words per block		  //
+parameter cache_capacity = 64*2^10;				  //
+parameter ways = 8;								  //
+parameter line_count = 512; 					  //
+//================================================//
+
+
+//================================Cache declaration===============================//
+logic valid[line_count:0][ways-1:0];							//Valid bit 	  //
+logic [26:0] tag[line_count-1:0];								//Block tag 	  //
+logic [word_size] cache[line_count:0][ways-1:0][block_size];	//Data array	  //
+//================================================================================//
+
+
+//=====================================Helpful Regs===============================//
+logic [63:0] cache_line_word_buf [3:0];		//Used when writing block to cache	  //
+logic [63:0] RAM_address_buffer;			//used for updating tag after fetch   //
+//================================================================================//
 
 
 
-logic valid[line_count:0];
-logic [26:0] tag[line_count:0];
-logic [word_size] cache[line_count:0][ways-1:0][block_size];
 
-logic [63:0] cache_line_word_buf [3:0];
-logic [63:0] RAM_address_buffer;
+//	Address: 0000.0000 0000.0000 0000.0000 0000.0000 
+//	                                             000 => Byte offset (8 bytes per word)   
+//	                                          0.0___ => Block (block size of 4)
+//	                               00.0000 000_.____ => Set (512 lines in the cache)
+//	         0000.0000 0000.0000 00__.____ ____.____ => Tag                      
+
+
+assign request_byte_offset = address[2:0];
+assign request_block = address[4:3];
+assign request_set = address[13:5];
+assign request_tag = address[31:14]; 
+
+
+assign block_offset=address[1:0];	
+
+
+
+
 
 enum logic [3:0] {
 	CACHE_IDLE,
@@ -64,7 +99,8 @@ enum logic [3:0] {
 } CACHE_STATE;
 
 
-assign block_offset=address[1:0];
+
+
 
 //logic for determining if address is a hit
 always_ff @(posedge clock, negedge reset) begin
@@ -78,7 +114,9 @@ always_ff @(posedge clock, negedge reset) begin
 		
 		case(CACHE_STATE)
 
-			CACHE_IDLE: begin	//0
+			//State 0
+			CACHE_IDLE: begin	
+				//Wait for cache request
 				if(search_cache==1'b1) begin
 					CACHE_STATE<=CACHE_CHECK_TAGS;
 				end else begin
@@ -88,7 +126,9 @@ always_ff @(posedge clock, negedge reset) begin
 				search_done<=1'b0;
 			end
 
-			CACHE_CHECK_TAGS: begin	//1
+			//State 1
+			CACHE_CHECK_TAGS: begin	
+				//Check cache for data
 				hit<=1'b0;
 				for(integer i = 0; i < line_count; i=i+1) begin
 					if((tag[i]>>3) == (address[26:0]>>3)) begin
@@ -102,7 +142,7 @@ always_ff @(posedge clock, negedge reset) begin
 
 			CACHE_READ_DONE: begin	//2
 
-				if(hit==1'b1) begin	//Cache hit. Go back to idle.
+				if(hit==1'b1) begin		
 					hit<=1'b0;
 					search_done<=1'b1;
 					CACHE_STATE<=CACHE_IDLE;
@@ -188,7 +228,7 @@ always_ff @ (posedge clock, negedge reset) begin
 
 		for(integer i = 0; i<line_count; i=i+1) begin
 			//init with mem skipping by 2s
-			valid[i]<=1'b0;
+			valid[i][0]<=1'b0;
 			tag[i]<=27'd0;
 			cache[i][0][3]<=27'd0;
 			cache[i][0][2]<=27'd0;

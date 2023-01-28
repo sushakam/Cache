@@ -17,9 +17,9 @@ module Cache_tb;
 
 	
 	/* Fake main memory */
-	logic [63:0] RAM [512*(2^20)];
-	logic [63:0] RAM_address;
-	logic [63:0] main_memory_data;
+	logic [63:0] RAM [512*(2^20)];	//2 GB Memory 
+	logic [63:0] main_memory_data;	//Output wire to cache
+	logic [31:0] RAM_address;		
 
 
 	Cache Cache(.clock(clock), .reset(reset), .search_cache(search_cache),
@@ -33,9 +33,9 @@ module Cache_tb;
         $dumpvars;
     end
 
-	/*initialize 4096B RAM*/
+	/*initialize 512 MB RAM*/
 	initial begin
-		for(integer i = 0; i < 4096; i=i+1) begin
+		for(integer i = 0; i < 512*(2^20); i=i+1) begin
 			RAM[i]=i*i;
 		end
 	end

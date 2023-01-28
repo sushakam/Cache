@@ -1,5 +1,3 @@
-// Cache.sv Testbench
-
 `include "rtl/Cache.sv"
 
 
@@ -17,15 +15,21 @@ module Cache_tb;
 
 	
 	/* Fake main memory */
-	logic [63:0] RAM [512*(2^20)];	//2 GB Memory 
+	logic [63:0] RAM [512*(2^20)];	//2 GB Memory TODO: make mem byte addressable
 	logic [63:0] main_memory_data;	//Output wire to cache
 	logic [31:0] RAM_address;		
 
 
+	logic [31:0] test_address;
+
+	function logic [31:0] generate_address(int tag, int set, int block);
+		return ((tag<<14) | (set<<5) | (block<<3));
+	endfunction
+
+
 	Cache Cache(.clock(clock), .reset(reset), .search_cache(search_cache),
 				.address(address), .main_memory_data(main_memory_data), .hit(hit), 
-				.search_done(search_done), .data(cache_data_out), .tag_out(tag_out), 
-				.RAM_address(RAM_address)
+				.search_done(search_done), .data(cache_data_out) 
 				);
 
     initial begin
@@ -36,7 +40,7 @@ module Cache_tb;
 	/*initialize 512 MB RAM*/
 	initial begin
 		for(integer i = 0; i < 512*(2^20); i=i+1) begin
-			RAM[i]=i*i;
+			RAM[i]=i;
 		end
 	end
 
@@ -84,115 +88,40 @@ module Cache_tb;
 		/*********EXAMPLE HITS AND MISSES************/
 
 
-		/**HIT (fetch address=0)**/
+		/*1*/
 		search_cache<=1'b1;
-		address<=32'd0;
-		
-		repeat (1) @(posedge clock);
-		search_cache<=1'b0;
-		repeat (2) @(posedge clock);	//wait for cache...
 
-		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, tag_out, cache_data_out, hit);
+		address<=generate_address(4,4,3);
 		
+		$display("Requesting cache from Tag: %0d, Set: %0d, Block: %0d", 4, 4, 3);
 
-		/**MISS (Compulsory)**/
-		search_cache<=1'b1;
-		address<=32'd16;
-		
 		repeat (1) @(posedge clock);
 		search_cache<=1'b0;
 		repeat (8) @(posedge clock);	//wait for cache...
 
-		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, tag_out, cache_data_out, hit);
 
-
-		/**HIT (Just loaded)**/
-		search_cache<=1'b1;
-		address<=32'd16;
+		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d\n\n", address, Cache.tag[Cache.request_set],
+				 Cache.cache[Cache.request_set][0][Cache.request_block], hit);
 		
+		
+		/*2*/
+		search_cache<=1'b1;
+
+		address<=generate_address(4,4,3);
+		
+		$display("Requesting cache from Tag: %0d, Set: %0d, Block: %0d", 4, 4, 3);
+
 		repeat (1) @(posedge clock);
 		search_cache<=1'b0;
 		repeat (2) @(posedge clock);	//wait for cache...
 
-		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, Cache.tag[address>>3], cache_data_out, hit);
 
-
-		/**MISS (Compulsory)**/
-		search_cache<=1'b1;
-		address<=32'd24;
+		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d\n\n", address, Cache.tag[Cache.request_set],
+				 Cache.cache[Cache.request_set][0][Cache.request_block], hit);
 		
-		repeat (1) @(posedge clock);
-		search_cache<=1'b0;
-		repeat (8) @(posedge clock);	//wait for cache...
-
-		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, Cache.tag[address>>3], cache_data_out, hit);
-
-
-		/**HIT (Just loaded)**/
-		search_cache<=1'b1;
-		address<=32'd24;
-		
-		repeat (1) @(posedge clock);
-		search_cache<=1'b0;
-		repeat (2) @(posedge clock);	//wait for cache...
-
-		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, Cache.tag[address>>3], cache_data_out, hit);
+	
 
 		
-		/**HIT (0-3 block already in memory)**/
-		search_cache<=1'b1;
-		address<=32'd2;
-		
-		repeat (1) @(posedge clock);
-		search_cache<=1'b0;
-		repeat (2) @(posedge clock);	//wait for cache...
-
-		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, Cache.tag[address>>3], cache_data_out, hit);
-
-
-		/**HIT (24-27 block already in memory)**/
-		search_cache<=1'b1;
-		address<=32'd25;
-		
-		repeat (1) @(posedge clock);
-		search_cache<=1'b0;
-		repeat (2) @(posedge clock);	//wait for cache...
-
-		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, Cache.tag[address>>3], cache_data_out, hit);
-
-
-		/**MISS (Replace in-use block)**/
-		search_cache<=1'b1;
-		address<=32'd28;
-		
-		repeat (1) @(posedge clock);
-		search_cache<=1'b0;
-		repeat (8) @(posedge clock);	//wait for cache...
-
-		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, Cache.tag[address>>3], cache_data_out, hit);
-
-
-		/**HIT (Just loaded block)**/
-		search_cache<=1'b1;
-		address<=32'd28;
-		
-		repeat (1) @(posedge clock);
-		search_cache<=1'b0;
-		repeat (2) @(posedge clock);	//wait for cache...
-
-		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, Cache.tag[address>>3], cache_data_out, hit);
-
-
-		/**MISS (Just replaced block)**/
-		search_cache<=1'b1;
-		address<=32'd25;
-		
-		repeat (1) @(posedge clock);
-		search_cache<=1'b0;
-		repeat (8) @(posedge clock);	//wait for cache...
-
-		$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d", address, Cache.tag[address>>3], cache_data_out, hit);
-
 
 	end
 

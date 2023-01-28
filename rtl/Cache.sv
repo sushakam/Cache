@@ -35,8 +35,7 @@ module Cache(
 	output logic hit,
 	output logic search_done,		//Flag indicating completion of cache search. Data is ready when high	TODO: rename to data_ready
 	output logic [63:0] data,
-	output logic [26:0] tag_out,	//For debugging (not needed)	TODO: delete
-	output logic [63:0] RAM_address	//For debugging (not needed)	TODO: delete
+	output logic [31:0] RAM_address	//For debugging (not needed)	TODO: delete
 
 );
 
@@ -67,21 +66,28 @@ logic [63:0] RAM_address_buffer;			//used for updating tag after fetch   //
 
 
 
-
-//	Address: 0000.0000 0000.0000 0000.0000 0000.0000 
-//	                                             000 => Byte offset (8 bytes per word)   
-//	                                          0.0___ => Block (block size of 4)
-//	                               00.0000 000_.____ => Set (512 lines in the cache)
-//	         0000.0000 0000.0000 00__.____ ____.____ => Tag                      
-
-
-assign request_byte_offset = address[2:0];
-assign request_block = address[4:3];
-assign request_set = address[13:5];
-assign request_tag = address[31:14]; 
-
+//===================================Cache addressing====================================//
+logic [2:0] request_byte_offset;								//TODO: remove/fix		 //
+assign request_byte_offset = address[2:0];												 //
+																						 //
+logic [1:0] request_block;																 //
+assign request_block = address[4:3];													 //
+																						 //
+logic [7:0] request_set;																 //
+assign request_set = address[13:5];														 //
+																						 //
+logic [17:0] request_tag;																 //
+assign request_tag = address[31:14]; 													 //
+																						 //
+//	Address: 0000.0000 0000.0000 0000.0000 0000.0000									 //
+//	                                             000 => Byte offset (8 bytes per word)   //
+//	                                          0.0___ => Block (block size of 4)			 //
+//	                               00.0000 000_.____ => Set (512 lines in the cache)     //
+//	         0000.0000 0000.0000 00__.____ ____.____ => Tag                      		 //
+//=======================================================================================//
 
 assign block_offset=address[1:0];	
+
 
 
 
@@ -122,7 +128,6 @@ always_ff @(posedge clock, negedge reset) begin
 				end else begin
 					CACHE_STATE<=CACHE_IDLE;
 				end
-				
 				search_done<=1'b0;
 			end
 
@@ -130,18 +135,16 @@ always_ff @(posedge clock, negedge reset) begin
 			CACHE_CHECK_TAGS: begin	
 				//Check cache for data
 				hit<=1'b0;
-				for(integer i = 0; i < line_count; i=i+1) begin
-					if((tag[i]>>3) == (address[26:0]>>3)) begin
-						hit<=1'b1;
-						data<=cache[address>>3][0][block_offset];
-					end
+				if(tag[request_set] == request_tag) begin	//Check if the tag exists in the cache
+					//TODO add valid check
+					data<=cache[request_set][0][request_block];
+					hit<=1'b1;
 				end
-
-				CACHE_STATE<=CACHE_READ_DONE;
+					CACHE_STATE<=CACHE_READ_DONE;
 			end
 
-			CACHE_READ_DONE: begin	//2
-
+			//State 2
+			CACHE_READ_DONE: begin
 				if(hit==1'b1) begin		
 					hit<=1'b0;
 					search_done<=1'b1;
@@ -150,71 +153,55 @@ always_ff @(posedge clock, negedge reset) begin
 					CACHE_STATE<=CACHE_MISS_READ_MEM;
 				end
 			end
-
-
-
-
-			//Write back to memory using hash function
-			//Set = address % 
-			/*****Handle a Cache miss write back******/
-
-			CACHE_MISS_READ_MEM: begin	//3
+			
+			/*****Handle a cache miss******/
+			//State 3
+			CACHE_MISS_READ_MEM: begin
 				//Set the main memory address to the address the CPU is 
 				//requesting from the cache
-
 				RAM_address<=address;
-				RAM_address_buffer<=address;
+				RAM_address_buffer<=address;	//Save initial address for later
 				CACHE_STATE<=CACHE_MISS_WRITE_BLOCK0;
 			end
 
-			CACHE_MISS_WRITE_BLOCK0: begin	//4
-				
+			//State 4
+			CACHE_MISS_WRITE_BLOCK0: begin
 				RAM_address<=RAM_address+32'd1;
-				
 				cache_line_word_buf[2]<=main_memory_data;
-
 				CACHE_STATE<=CACHE_MISS_WRITE_BLOCK1;
 
 			end
 
-			CACHE_MISS_WRITE_BLOCK1: begin	//5
-				
+			//State 5
+			CACHE_MISS_WRITE_BLOCK1: begin
 				RAM_address<=RAM_address+32'd1;
-
 				cache_line_word_buf[1]<=main_memory_data;
-				
 				CACHE_STATE<=CACHE_MISS_WRITE_BLOCK2;
 
 			end
 
-			CACHE_MISS_WRITE_BLOCK2: begin	//6
-				
+			//State 6
+			CACHE_MISS_WRITE_BLOCK2: begin
 				RAM_address<=RAM_address+32'd1;
-				
 				cache_line_word_buf[0]<=main_memory_data;
-
 				CACHE_STATE<=CACHE_MISS_WRITE_BLOCK3;
 
 			end
 
-			CACHE_MISS_WRITE_BLOCK3: begin	//7
+			//State 7
+			CACHE_MISS_WRITE_BLOCK3: begin
 				
-				
-				cache[RAM_address_buffer>>3][0][0]<=cache_line_word_buf[2];
-				cache[RAM_address_buffer>>3][0][1]<=cache_line_word_buf[1];
-				cache[RAM_address_buffer>>3][0][2]<=cache_line_word_buf[0];
-				cache[RAM_address_buffer>>3][0][3]<=main_memory_data;
-
-				tag[RAM_address_buffer>>3]<=RAM_address_buffer[26:0];
+				cache[request_set][0][0]<=cache_line_word_buf[2];
+				cache[request_set][0][1]<=cache_line_word_buf[1];
+				cache[request_set][0][2]<=cache_line_word_buf[0];
+				cache[request_set][0][3]<=main_memory_data;
+				tag[request_set]<=request_tag;
 
 				search_done<=1'b1;
 				CACHE_STATE<=CACHE_IDLE;
 
 			end
 
-			/****************************************/
-
-			
 		endcase
 	end
 end
@@ -238,8 +225,7 @@ always_ff @ (posedge clock, negedge reset) begin
 
 	end else begin
 
-		//data<=cache[address][0];
-		tag_out<=tag[address];
+		//data<=cache[request_set][0][request_block];
 
 	end
 end

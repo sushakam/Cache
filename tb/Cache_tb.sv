@@ -21,21 +21,39 @@ module Cache_tb;
 	logic [31:0] RAM_address;		
 
 
-	task generate_cache_request(int tag, int set, int block);
-		address<=((tag<<14) | (set<<5) | (block<<3));
+	task generate_cache_read_request(int tag, int set, int block);
+		assert(block<=3 && block>=0) else $display("Block size invalid. Only [0,3] allowed, got %0d", block);
+
+		address<=((tag<<11) | (set<<2) | (block));
+
 		search_cache<=1'b1;	//Start cache search
-		$write("Requesting cache from Tag: %0d, Set: %0d, Block: %0d ", 0, 0, 1);
 		repeat (1) @(posedge clock);
 		search_cache<=1'b0;
-		@(posedge search_done);	//wait for cache...
-		$display("Hit: %0d", hit);
-		//$display("Address: %0d, Tag: %0d, Data: %0d, hit: %0d\n\n", address, Cache.tag[Cache.request_set],
-		//		 Cache.cache[Cache.request_set][0][Cache.request_block], hit);
+		@(posedge data_ready);	//wait for cache...
+		$display("Base address for block %0d ",  {address[31:2],2'b0});
+		$display("Requesting cache from Tag: %0d, Set: %0d, Block: %0d, Hit: %0d", tag, set, block, hit);
+
+		/*Check request results*/
+
+		//Check correct data is read
+		assert(cache_data_out==(address)) else begin
+			$display("Error: expected data %0d, got %0d", address+block, cache_data_out);
+			$display("Cache line at %0d is %0d %0d %0d %0d", address, Cache.cache[set][0][0], Cache.cache[set][0][1], Cache.cache[set][0][2], Cache.cache[set][0][3]);
+		end
+		
+		//Check that a hit did not occur on invalid block
+		if(hit==1'b1) begin
+			assert(Cache.valid[Cache.request_set][0]==1) else
+				$display("Error: Hit on invalid block V: %0d, tag: %0d, set: %0d, block: %0d\n", Cache.valid[set][0], tag, set, block );
+		end
+
+		$display("");
+	
 	 endtask
 
 	Cache Cache(.clock(clock), .reset(reset), .search_cache(search_cache),
 				.address(address), .main_memory_data(main_memory_data), .hit(hit), 
-				.search_done(search_done), .data(cache_data_out), .RAM_address(RAM_address)
+				.data_ready(data_ready), .data(cache_data_out), .RAM_address(RAM_address)
 				);
 
     initial begin
@@ -78,7 +96,6 @@ module Cache_tb;
 
 
 
-
 	/*sample test cases*/
 	initial begin
 
@@ -94,10 +111,25 @@ module Cache_tb;
 
 		/*********EXAMPLE HITS AND MISSES************/
 
-		generate_cache_request(1,1,1);
 
-		generate_cache_request(1,1,1);
+		//task generate_cache_request(int tag, int set, int block);
+		
+		generate_cache_read_request(1,1,1);	//MISS
+		generate_cache_read_request(1,1,1);	//HIT
 
+		generate_cache_read_request(0,0,0);	//MISS
+		generate_cache_read_request(0,0,0);	//HIT
+
+		generate_cache_read_request(1,1,1);	//HIT
+		generate_cache_read_request(1,1,1);	//HIT
+
+
+		generate_cache_read_request(7,7,0);	//MISS
+		generate_cache_read_request(7,7,0);	//HIT
+		generate_cache_read_request(7,7,1);	//HIT
+
+		generate_cache_read_request(7,7,2);	//HIT
+		generate_cache_read_request(7,7,3);	//HIT
 
 	
 	end

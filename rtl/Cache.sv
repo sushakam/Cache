@@ -10,7 +10,8 @@
 
 
 /*		Specifications
-	*
+	*	
+	*	8-Way Set associative | write-back, write-allocate
 	*	Main Memory Size = 2 GB 
 	*	
 	*	Cache Size = 64 kB
@@ -33,7 +34,7 @@ module Cache(
 	input [31:0] address,		
 	input [63:0] main_memory_data,	//Input from main memory 
 	output logic hit,
-	output logic search_done,		//Flag indicating completion of cache search. Data is ready when high	TODO: rename to data_ready
+	output logic data_ready,		//Flag indicating completion of cache search. Data is ready when high	TODO: rename to data_ready
 	output logic [63:0] data,
 	output logic [31:0] RAM_address	
 
@@ -67,17 +68,14 @@ logic [63:0] RAM_address_buffer;			//used for updating tag after fetch   //
 
 
 //===================================Cache addressing====================================//
-logic [2:0] request_byte_offset;								//TODO: remove/fix		 //
-assign request_byte_offset = address[2:0];												 //
-																						 //
 logic [1:0] request_block;																 //
-assign request_block = address[4:3];													 //
+assign request_block = address[1:0];													 //
 																						 //
 logic [7:0] request_set;																 //
-assign request_set = address[13:5];														 //
+assign request_set = address[10:2];														 //
 																						 //
 logic [17:0] request_tag;																 //
-assign request_tag = address[31:14]; 													 //
+assign request_tag = address[31:11]; 													 //
 																						 //
 //	Address: 0000.0000 0000.0000 0000.0000 0000.0000									 //
 //	                                             000 => Byte offset (8 bytes per word)   //
@@ -97,7 +95,8 @@ enum logic [3:0] {
 	CACHE_MISS_WRITE_BLOCK0,
 	CACHE_MISS_WRITE_BLOCK1,
 	CACHE_MISS_WRITE_BLOCK2,
-	CACHE_MISS_WRITE_BLOCK3
+	CACHE_MISS_WRITE_BLOCK3,
+	CACHE_MISS_OUTPUT_DATA
 } CACHE_STATE;
 
 
@@ -109,7 +108,7 @@ always_ff @(posedge clock, negedge reset) begin
 		
 	if(reset==1'b0) begin
 		hit<=1'b0;
-		search_done<=1'b0;
+		data_ready<=1'b0;
 		RAM_address<=32'd0;
 		RAM_address_buffer<=63'd0;
 		CACHE_STATE<=CACHE_IDLE;
@@ -127,7 +126,7 @@ always_ff @(posedge clock, negedge reset) begin
 					CACHE_STATE<=CACHE_IDLE;
 				end
 				hit<=1'b0;
-				search_done<=1'b0;
+				data_ready<=1'b0;
 			end
 
 			//State 1
@@ -136,7 +135,7 @@ always_ff @(posedge clock, negedge reset) begin
 				if(tag[request_set] == request_tag && valid[request_set][0]==1'b1) begin	//Check if the tag exists in the cache
 					data<=cache[request_set][0][request_block];
 					hit<=1'b1;
-					search_done<=1'b1;
+					data_ready<=1'b1;
 					CACHE_STATE<=CACHE_IDLE;
 				end else
 					CACHE_STATE<=CACHE_MISS_READ_MEM;
@@ -148,7 +147,8 @@ always_ff @(posedge clock, negedge reset) begin
 			CACHE_MISS_READ_MEM: begin
 				//Set the main memory address to the address the CPU is 
 				//requesting from the cache
-				RAM_address<=address;
+				//RAM_address<={address[31:2],2'b00};
+				RAM_address<={address[31:2],2'b0};
 				RAM_address_buffer<=address;	//Save initial address for later
 				CACHE_STATE<=CACHE_MISS_WRITE_BLOCK0;
 			end
@@ -179,7 +179,6 @@ always_ff @(posedge clock, negedge reset) begin
 
 			//State 6
 			CACHE_MISS_WRITE_BLOCK3: begin
-				
 				cache[request_set][0][0]<=cache_line_word_buf[2];
 				cache[request_set][0][1]<=cache_line_word_buf[1];
 				cache[request_set][0][2]<=cache_line_word_buf[0];
@@ -187,9 +186,15 @@ always_ff @(posedge clock, negedge reset) begin
 				tag[request_set]<=request_tag;
 				valid[request_set][0]<=1'b1;
 
-				search_done<=1'b1;
-				CACHE_STATE<=CACHE_IDLE;
+				CACHE_STATE<=CACHE_MISS_OUTPUT_DATA;
+			end
 
+			//State 7
+			CACHE_MISS_OUTPUT_DATA: begin
+				data<=cache[request_set][0][request_block];
+				data_ready<=1'b1;
+				
+				CACHE_STATE<=CACHE_IDLE;
 			end
 
 		endcase

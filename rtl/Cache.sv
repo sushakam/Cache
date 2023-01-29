@@ -35,7 +35,7 @@ module Cache(
 	output logic hit,
 	output logic search_done,		//Flag indicating completion of cache search. Data is ready when high	TODO: rename to data_ready
 	output logic [63:0] data,
-	output logic [31:0] RAM_address	//For debugging (not needed)	TODO: delete
+	output logic [31:0] RAM_address	
 
 );
 
@@ -90,13 +90,9 @@ assign block_offset=address[1:0];
 
 
 
-
-
-
 enum logic [3:0] {
 	CACHE_IDLE,
 	CACHE_CHECK_TAGS,
-	CACHE_READ_DONE,
 	CACHE_MISS_READ_MEM,
 	CACHE_MISS_WRITE_BLOCK0,
 	CACHE_MISS_WRITE_BLOCK1,
@@ -114,6 +110,7 @@ always_ff @(posedge clock, negedge reset) begin
 	if(reset==1'b0) begin
 		hit<=1'b0;
 		search_done<=1'b0;
+		RAM_address<=32'd0;
 		RAM_address_buffer<=63'd0;
 		CACHE_STATE<=CACHE_IDLE;
 	end else begin
@@ -123,39 +120,31 @@ always_ff @(posedge clock, negedge reset) begin
 			//State 0
 			CACHE_IDLE: begin	
 				//Wait for cache request
+				
 				if(search_cache==1'b1) begin
 					CACHE_STATE<=CACHE_CHECK_TAGS;
 				end else begin
 					CACHE_STATE<=CACHE_IDLE;
 				end
+				hit<=1'b0;
 				search_done<=1'b0;
 			end
 
 			//State 1
 			CACHE_CHECK_TAGS: begin	
 				//Check cache for data
-				hit<=1'b0;
-				if(tag[request_set] == request_tag) begin	//Check if the tag exists in the cache
-					//TODO add valid check
+				if(tag[request_set] == request_tag && valid[request_set][0]==1'b1) begin	//Check if the tag exists in the cache
 					data<=cache[request_set][0][request_block];
 					hit<=1'b1;
-				end
-					CACHE_STATE<=CACHE_READ_DONE;
-			end
-
-			//State 2
-			CACHE_READ_DONE: begin
-				if(hit==1'b1) begin		
-					hit<=1'b0;
 					search_done<=1'b1;
 					CACHE_STATE<=CACHE_IDLE;
-				end else begin	//Cache miss. Fetch block from main memory. Use replacement policy (Random) 
+				end else
 					CACHE_STATE<=CACHE_MISS_READ_MEM;
-				end
 			end
+
 			
 			/*****Handle a cache miss******/
-			//State 3
+			//State 2
 			CACHE_MISS_READ_MEM: begin
 				//Set the main memory address to the address the CPU is 
 				//requesting from the cache
@@ -164,7 +153,7 @@ always_ff @(posedge clock, negedge reset) begin
 				CACHE_STATE<=CACHE_MISS_WRITE_BLOCK0;
 			end
 
-			//State 4
+			//State 3
 			CACHE_MISS_WRITE_BLOCK0: begin
 				RAM_address<=RAM_address+32'd1;
 				cache_line_word_buf[2]<=main_memory_data;
@@ -172,7 +161,7 @@ always_ff @(posedge clock, negedge reset) begin
 
 			end
 
-			//State 5
+			//State 4
 			CACHE_MISS_WRITE_BLOCK1: begin
 				RAM_address<=RAM_address+32'd1;
 				cache_line_word_buf[1]<=main_memory_data;
@@ -180,7 +169,7 @@ always_ff @(posedge clock, negedge reset) begin
 
 			end
 
-			//State 6
+			//State 5
 			CACHE_MISS_WRITE_BLOCK2: begin
 				RAM_address<=RAM_address+32'd1;
 				cache_line_word_buf[0]<=main_memory_data;
@@ -188,7 +177,7 @@ always_ff @(posedge clock, negedge reset) begin
 
 			end
 
-			//State 7
+			//State 6
 			CACHE_MISS_WRITE_BLOCK3: begin
 				
 				cache[request_set][0][0]<=cache_line_word_buf[2];
@@ -196,6 +185,7 @@ always_ff @(posedge clock, negedge reset) begin
 				cache[request_set][0][2]<=cache_line_word_buf[0];
 				cache[request_set][0][3]<=main_memory_data;
 				tag[request_set]<=request_tag;
+				valid[request_set][0]<=1'b1;
 
 				search_done<=1'b1;
 				CACHE_STATE<=CACHE_IDLE;
